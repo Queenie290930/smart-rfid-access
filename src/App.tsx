@@ -1,299 +1,117 @@
-import { useEffect, useState } from "react";
-import type { Schema } from "../amplify/data/resource";
-import { generateClient } from "aws-amplify/data";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { fetchAuthSession } from "aws-amplify/auth";
+import { filterLogs, parseLogs, summarize, type AccessLog } from "./logs";
+import "./App.css";
 
-import moment from "moment";
-import { Line } from 'react-chartjs-2';
+const API_URL = import.meta.env.VITE_LOGS_API_URL ||
+  "https://9lxucnwrvi.execute-api.eu-north-1.amazonaws.com/logs";
+const timeFormat = new Intl.DateTimeFormat("sv-SE", {
+  timeZone: "Europe/Stockholm", hour: "2-digit", minute: "2-digit", second: "2-digit",
+});
+const dateFormat = new Intl.DateTimeFormat("sv-SE", {
+  timeZone: "Europe/Stockholm", year: "numeric", month: "2-digit", day: "2-digit",
+});
+interface Props { authenticated: boolean; account?: string; onSignOut?: () => void }
 
-import {
-  Badge,
-  Button,
-  Card,
-  Collection,
-  Divider,
-  Flex,
-  useAuthenticator,
-  View,
-  SelectField,
-  TextField,
-  SwitchField,
-} from '@aws-amplify/ui-react';
+function App({ authenticated, account, onSignOut }: Props) {
+  const [logs, setLogs] = useState<AccessLog[]>([]);
+  const [loadedAt, setLoadedAt] = useState<Date | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("all");
+  const [autoRefresh, setAutoRefresh] = useState(false);
+  const request = useRef<AbortController | null>(null);
 
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-} from 'chart.js';
-
-
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend
-);
-
-const client = generateClient<Schema>();
-
-function App() {
-
-  const { user, signOut } = useAuthenticator();
-
-  const [selectedOption, setSelectedOption] = useState<string>("");
-
-  const [newDeviceId, setNewDeviceId] = useState("");
-  const [newDeviceType, setNewDeviceType] = useState("esp32");
-
-  const [devices, setDevices] = useState<Array<Schema["Devices"]["type"]>>([]);
-  const [telemetries, setTelemetry] = useState<Array<Schema["Telemetry"]["type"]>>([]);
-  const [_currentTime, setCurrentTime] = useState(Date.now());
+  const loadLogs = useCallback(async () => {
+    request.current?.abort();
+    const controller = new AbortController();
+    request.current = controller;
+    const timeout = window.setTimeout(() => controller.abort(), 15000);
+    setLoading(true);
+    try {
+      const headers: Record<string, string> = {};
+      if (authenticated) {
+        const session = await fetchAuthSession();
+        const token = session.tokens?.accessToken.toString();
+        if (!token) throw new Error("Sessionen har gått ut. Logga in igen.");
+        headers.Authorization = `Bearer ${token}`;
+      }
+      const response = await fetch(API_URL, {
+        headers, signal: controller.signal, cache: "no-store", credentials: "omit",
+      });
+      if (!response.ok) {
+        throw new Error(response.status === 401 || response.status === 403
+          ? `Åtkomst nekad (HTTP ${response.status}). Kontrollera inloggning och API-behörigheter.`
+          : `API:et svarade med HTTP ${response.status}.`);
+      }
+      const parsed = parseLogs(await response.json());
+      if (request.current !== controller || controller.signal.aborted) return;
+      setLogs(parsed);
+      setLoadedAt(new Date());
+      setError("");
+    } catch (cause) {
+      if (request.current !== controller) return;
+      setError(controller.signal.aborted ? "Anropet tog för lång tid. Försök igen." :
+        cause instanceof TypeError ? "Kunde inte nå API:et. Kontrollera nätverket och API Gateways CORS-inställningar." :
+          cause instanceof Error ? cause.message : "Kunde inte hämta loggar.");
+    } finally {
+      window.clearTimeout(timeout);
+      if (request.current === controller) {
+        request.current = null;
+        setLoading(false);
+      }
+    }
+  }, [authenticated]);
 
   useEffect(() => {
-    const filter = selectedOption && selectedOption !== "all"
-      ? { filter: { device_id: { eq: selectedOption } } }
-      : {};
-
-    client.models.Telemetry.observeQuery(filter).subscribe({
-      next: (data) => { setTelemetry([...data.items]) },
-    });
-  }, [selectedOption]); // Re-run when selectedOption changes
+    void loadLogs();
+    return () => { request.current?.abort(); request.current = null; };
+  }, [loadLogs]);
 
   useEffect(() => {
-    client.models.Devices.observeQuery().subscribe({
-      next: (data) => { setDevices([...data.items]) },
-    });
-  }, []);
+    if (!autoRefresh) return;
+    const interval = window.setInterval(() => {
+      if (!document.hidden && !request.current) void loadLogs();
+    }, 30000);
+    return () => window.clearInterval(interval);
+  }, [autoRefresh, loadLogs]);
 
-  // Update current time every 30 seconds to refresh "Last Seen" timestamps
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentTime(Date.now());
-    }, 30000); // Update every 30 seconds
-
-    return () => clearInterval(interval);
-  }, []);
-
-  function deleteTelemetry(device_id: string, timestamp: string) {
-    client.models.Telemetry.delete({ device_id, timestamp })
-  }
-
-  function createDevice() {
-    if (!newDeviceId) return;
-    client.models.Devices.create({
-      device_id: newDeviceId,
-      owner: user.userId,
-      device_type: newDeviceType,
-    });
-    setNewDeviceId("");
-  }
-
-  function deleteDevice(device_id: string) {
-    client.models.Devices.delete({ device_id })
-  }
-
-  const chartOptions = {
-
-    onClick: function (evt: any, element: string | any[]) {
-      evt;
-      if (element.length > 0) {
-        var ind = element[0].index;
-        deleteTelemetry(telemetries[ind].device_id, telemetries[ind].timestamp.toString())
-      }
-    },
-
-    responsive: true,
-    interaction: {
-      mode: 'index' as const,
-      intersect: false,
-    },
-    stacked: false,
-    plugins: {
-      title: {
-        display: true,
-        text: telemetries[0]?.device_id ? telemetries[0].device_id : "",
-      },
-    },
-    scales: {
-      y: {
-        type: 'linear' as const,
-        display: true,
-        position: 'left' as const,
-        ticks: {
-          callback: function (value: any) {
-            return value + ' °C';
-          }
-        }
-      },
-      y1: {
-        type: 'linear' as const,
-        display: true,
-        position: 'right' as const,
-        ticks: {
-          callback: function (value: any) {
-            return value + ' %';
-          }
-        }
-      }
-    },
-  };
-
-
-  const cartData = {
-    labels: telemetries.map((data) => {
-      return moment(parseInt(data?.timestamp)).format("YYYY-MM-DD HH:mm:ss");
-    }),
-    datasets: [
-      {
-        label: 'Temperature',
-        data: telemetries.map((data) => {
-          return data?.temperature;
-        }),
-        tension: 0.4,
-        borderColor: 'rgb(255, 99, 132)',
-        backgroundColor: 'rgba(255, 99, 132, 0.5)',
-        yAxisID: 'y',
-      },
-      {
-        label: 'Humidity',
-        data: telemetries.map((data) => {
-          return data?.humidity;
-        }),
-        tension: 0.4,
-        borderColor: 'rgb(99, 255, 132)',
-        backgroundColor: 'rgba(99, 255, 132, 0.5)',
-        yAxisID: 'y1',
-      }
-    ],
-  };
-
+  const filtered = useMemo(() => filterLogs(logs, search, status), [logs, search, status]);
+  const counts = summarize(logs);
+  const latest = logs[0];
 
   return (
-    <main>
-      <h1>{user?.signInDetails?.loginId}'s Devices</h1>
-      <Divider padding="xs" />
-      <h3>Devices</h3>
-      {
-        <>
-          <TextField
-            label="Device ID"
-            descriptiveText="For a weather station, use the SMHI station number"
-            value={newDeviceId}
-            onChange={(e) => setNewDeviceId(e.target.value)}
-          />
-          <SelectField
-            label="Type"
-            value={newDeviceType}
-            onChange={(e) => setNewDeviceType(e.target.value)}
-          >
-            <option value="esp32">ESP32</option>
-            <option value="weatherStation">Weather Station</option>
-          </SelectField>
-          <Button variation="primary" onClick={createDevice}>
-            Add Device
-          </Button>
-        </>
-      }
-
-      <Divider padding="xs" />
-
-      <Collection
-        items={devices}
-        type="list"
-        direction="row"
-        gap="20px"
-        wrap="nowrap"
-      >
-        {(item, index) => (
-          <Card
-            key={index}
-            borderRadius="medium"
-            maxWidth="20rem"
-            variation="outlined"
-          >
-
-            <View padding="xs">
-
-              <br />
-              <Flex>
-                Status:
-                <Badge variation={(item?.status == "connected") ? "success" : "error"} key={item.device_id}>
-                  {item?.status ? item?.status.charAt(0).toUpperCase() + String(item?.status).slice(1) : ""}
-                </Badge>
-              </Flex>
-              <Flex>
-                Last Seen: {telemetries.filter(t => t.device_id === item.device_id).sort((a, b) => parseInt(b.timestamp) - parseInt(a.timestamp))[0]?.timestamp ? moment(parseInt(String(telemetries.filter(t => t.device_id === item.device_id).sort((a, b) => parseInt(b.timestamp) - parseInt(a.timestamp))[0].timestamp))).fromNow() : "Never"}
-              </Flex>
-              <br />
-              <Flex>ID: {item.device_id}</Flex>
-              <TextField
-                label="Webhook URL"
-                defaultValue={item.webhook_url ?? ""}
-                onBlur={(e) =>
-                  client.models.Devices.update({
-                    device_id: item.device_id,
-                    webhook_url: e.target.value,
-                  })
-                }
-              />
-              <SwitchField
-                label="Webhook telemetry enabled"
-                isChecked={item.webhook_telemetry_enabled === true}
-                onChange={(e) =>
-                  client.models.Devices.update({
-                    device_id: item.device_id,
-                    webhook_telemetry_enabled: e.target.checked,
-                  })
-                }
-              />
-              <SwitchField
-                label="Webhook status enabled"
-                isChecked={item.webhook_status_enabled === true}
-                onChange={(e) =>
-                  client.models.Devices.update({
-                    device_id: item.device_id,
-                    webhook_status_enabled: e.target.checked,
-                  })
-                }
-              />
-              <br />
-              <Button variation="destructive" isFullWidth onClick={() => deleteDevice(item.device_id)}>
-                Delete
-              </Button>
-            </View>
-          </Card>
-        )}
-      </Collection>
-
-      <Divider padding="xs" />
-      <SelectField
-        label="Telemetry"
-        descriptiveText="Select a device"
-        value={selectedOption}
-        onChange={(e) => { setSelectedOption(e.target.value) }}
-      >
-        <option value="all">All</option>
-        {devices.map((device) => (
-          <option key={device.device_id} value={device.device_id}>{device.device_id}</option>
-        ))}
-      </SelectField>
-
-      <View padding="xs"></View>
-
-      <Line options={chartOptions} data={cartData}></Line>
-
-      <Divider padding="xs" />
-
-      <button onClick={signOut}>Sign out</button>
-    </main>
+    <>
+      <header className="topbar">
+        <a className="brand" href="./"><span className="brand-icon" aria-hidden="true">D</span> DoorLock <span className="brand-tag">IoT Dashboard</span></a>
+        <div className="account"><span>{account ?? "Lokal förhandsvisning"}</span>{onSignOut && <button className="secondary" onClick={onSignOut}>Logga ut</button>}</div>
+      </header>
+      <main className="dashboard">
+        {!authenticated && <aside className="preview-note"><strong>Lokal förhandsvisning utan inloggning.</strong> Amplify-konfiguration saknas ännu. Efter deployment används Cognito-inloggning. Skydda även API-routen med JWT innan appen används med begränsad åtkomst.</aside>}
+        <div className="intro">
+          <div><p className="eyebrow">RFID · AWS IOT CORE · DYNAMODB</p><h1>Koll på varje kortförsök.</h1><p className="subtitle">Åtkomsthistorik från din RFID-läsare, samlad på ett ställe.</p></div>
+          <button className="refresh" disabled={loading} onClick={() => void loadLogs()}>{loading ? "Hämtar…" : "↻  Uppdatera loggar"}</button>
+        </div>
+        <div className="connection" role="status" aria-live="polite"><span className={`dot ${loading ? "" : error ? "failed" : "ok"}`} /><span>{loading ? "Hämtar loggar…" : error ? loadedAt ? "Uppdatering misslyckades · visar tidigare data" : "Ingen anslutning till API:et" : "Loggar hämtade från AWS"}</span><span className="updated">{loadedAt && `Senast hämtat ${timeFormat.format(loadedAt)}`}</span></div>
+        {error && <div className="error" role="alert">{error}</div>}
+        <section className="stats" aria-label="Statistik för hämtade loggar">
+          <article className="stat"><span>Hämtade försök</span><strong>{loadedAt ? counts.total : "—"}</strong><small>Upp till 100 senaste händelser</small></article>
+          <article className="stat"><span><i className="mini green" /> Godkända</span><strong>{loadedAt ? counts.granted : "—"}</strong><small>I hämtade loggar</small></article>
+          <article className="stat"><span><i className="mini red" /> Nekade</span><strong>{loadedAt ? counts.denied : "—"}</strong><small>I hämtade loggar</small></article>
+          <article className="stat"><span>Senaste försök</span><strong className="time">{latest ? timeFormat.format(latest.receivedAt) : "—"}</strong><small>{latest ? dateFormat.format(latest.receivedAt) : "Ingen händelse hämtad"}</small></article>
+        </section>
+        <section className="panel" aria-labelledby="history-heading">
+          <div className="panel-heading"><div><h2 id="history-heading">Senaste aktivitet</h2><p>doorlock-01 · senaste händelsen först · Europe/Stockholm</p></div><label className="auto"><input type="checkbox" checked={autoRefresh} onChange={(e) => setAutoRefresh(e.target.checked)} /> Uppdatera var 30:e sekund</label></div>
+          <div className="filters"><label className="search"><span>Sök kort-ID</span><input type="search" placeholder="Exempel: 40DE91A1" value={search} onChange={(e) => setSearch(e.target.value)} /></label><label><span>Åtkomststatus</span><select value={status} onChange={(e) => setStatus(e.target.value)}><option value="all">Alla statusar</option><option value="granted">Godkänd</option><option value="denied">Nekad</option></select></label><p aria-live="polite">{loadedAt ? `${filtered.length} av ${logs.length} händelser` : "Ingen data hämtad"}</p></div>
+          <div className="table-wrap"><table><caption className="sr-only">RFID-loggar med tid, kort-ID, åtkomststatus och enhet</caption><thead><tr><th scope="col">Tidpunkt</th><th scope="col">Kort-ID</th><th scope="col">Åtkomst</th><th scope="col">Enhet</th></tr></thead><tbody>
+            {filtered.map((log) => <tr key={`${log.deviceId}:${log.eventId}`}><td className="time-cell">{timeFormat.format(log.receivedAt)}<small>{dateFormat.format(log.receivedAt)}</small></td><td className="uid">{log.uid}</td><td><span className={`badge ${log.granted ? "allowed" : "denied"}`}>{log.granted ? "● Godkänd" : "● Nekad"}</span></td><td>{log.deviceId}</td></tr>)}
+            {!filtered.length && <tr><td colSpan={4} className="empty">{loading ? "Hämtar dina loggar…" : !loadedAt ? "Inga loggar kunde hämtas. Se meddelandet ovan." : logs.length ? "Inga händelser matchar ditt filter." : "Inga loggar ännu. Blippa ett kort och uppdatera."}</td></tr>}
+          </tbody></table></div>
+        </section>
+        <footer><span>RFID → ESP32 → AWS IoT Core → DynamoDB</span><span>Kortbehörigheter hanteras tills vidare i ESP32-koden.</span></footer>
+      </main>
+    </>
   );
 }
-
 export default App;

@@ -27,3 +27,22 @@ dist-ssr
 .amplify
 amplify_outputs*
 amplifyconfiguration*
+
+# Environment settings; commit only the example without secrets
+.env
+.env.*
+!.env.example
+
+# AWS credentials and ESP32 secrets / certificates
+.aws/
+secrets.h
+secrets_real.h
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Local caches, test coverage and TypeScript build metadata
+.npm/
+coverage/
+*.tsbuildinfo

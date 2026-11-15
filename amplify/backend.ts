@@ -1,15 +1,6 @@
 import { defineBackend } from '@aws-amplify/backend';
 import { auth } from './auth/resource';
-import { data } from './data/resource';
 
-import { graphqlIoTCoreTelemetry } from './functions/graphqlIoTCoreTelemetry/resource';
-import { graphqlIoTCoreStatus } from './functions/graphqlIoTCoreStatus/resource';
-import { pollSmhi } from './jobs/pollSmhi/resource';
-
-defineBackend({
-  auth,
-  data,
-  graphqlIoTCoreTelemetry,
-  graphqlIoTCoreStatus,
-  pollSmhi,
-});
+// Loggarna läses från befintligt API Gateway/Lambda och DoorLockLogs.
+// Amplify skapar endast resurserna för inloggning här.
+defineBackend({ auth });
