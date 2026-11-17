@@ -1,111 +1,118 @@
 # DoorLock – RFID Dashboard
 
-Lärarens React/Vite/Amplify-mall, anpassad till ESP32 + RC522 + RGB + buzzer.
+DoorLock är ett IoT-projekt med en ESP32 och en RFID-läsare. Kortförsök skickas
+till AWS och visas på en webbsida med inloggning. RGB-LED och buzzer ger
+återkoppling när ett kort godkänns eller nekas.
 
-## Dataflöden
+Webbappen bygger på [kursens React/Vite/Amplify-mall](https://github.com/jh83/amplify-vite-react-template-2025-modified).
 
-Nytt workshopflöde (kräver deployment och separat IoT-regel):
+## Funktioner
 
-RFID → ESP32 → MQTT/TLS → IoT-regel → doorlockTelemetry (Lambda)
-→ Amplify Data/AppSync GraphQL → Telemetry → subscription → React.
+- Inloggning med Amazon Cognito.
+- Kortförsök i realtid via Amplify Data och GraphQL-subscriptions.
+- Sökning på kort-ID och filtrering på godkända eller nekade försök.
+- Statistik för de senaste 100 händelserna som visas.
+- Enhetsregister med ägare, namn och etiketter.
+- Discord-notis vid nekade kortförsök.
+- Daglig Discord-sammanställning kl. 08:00 svensk tid efter deployment och aktivering.
 
-Devices innehåller ägare, namn, metadataetiketter och valfri Discord-webhook.
-Lambda hämtar owner från enhetsregistret. Browseranvändare får bara läsa sina
-Telemetry-poster; Lambda skriver dem via IAM. Inget publikt API-key-läge ingår.
-Frontendens enhetsregistrering är avsedd för denna enanvändardemo; för en publik
-fleranvändartjänst behövs även säker tilldelning av fysiska enheter vid registrering.
+Kortbehörigheter hanteras i ESP32-koden. Enhetsregistreringen på webbsidan
+lägger inte till eller spärrar RFID-kort.
 
-Äldre flöde, separat och tillgängligt via datakällsväljaren:
+## Hårdvara
 
-RFID → ESP32 → MQTT/TLS → AWS IoT Core → IoT-regel → DoorLockLogs (DynamoDB)
-→ GetDoorLockLogs (Lambda) → API Gateway GET /logs → React-dashboard.
+- Arduino Nano ESP32
+- RC522 RFID-läsare
+- RGB-LED
+- Passiv buzzer
 
-API: https://9lxucnwrvi.execute-api.eu-north-1.amazonaws.com/logs
+## Dataflöde
 
-Dashboarden visar UID, godkänd/nekad åtkomst, tid, enhet, sökning, statusfilter,
-statistik, GraphQL-realtid och valfri polling för det äldre REST-flödet. Tider visas i Europe/Stockholm.
-Statistiken gäller de upp till 100 visade loggarna. observeQuery synkroniserar alla ägarens matchande poster och vyn visar de senaste 100; vid större datamängder behövs tidsindex och begränsade frågor.
-Ingen servo eller kortadministration ingår. Kortbehörigheter styrs ännu i ESP32.
-
-## Lokal start
-
-1. Använd Node.js 24 LTS eller senare och kör `npm install`.
-2. Kör `npm run dev` och öppna http://localhost:5173.
-3. Om `amplify_outputs.json` saknas visas en tydligt markerad lokal förhandsvisning.
-   Den hämtar verkliga loggar från befintligt API; den innehåller inga exempeldata.
-4. Om API-anrop misslyckas, konfigurera CORS enligt nedan.
-5. `npm test` verifierar validering, sortering och filtrering; `npm run build` bygger appen.
-
-## Amplify-backend och inloggning
-
-`amplify/backend.ts` definierar befintlig Cognito-auth, Devices, Telemetry och doorlockTelemetry. Väderexemplen är ersatta med RFID-fält. Befintligt IoT Core, Lambda,
-API Gateway och DoorLockLogs ändras inte av den här koden.
-
-Koppla ditt eget GitHub-repository till Amplify i eu-north-1. Befintlig
-`amplify.yml` deployar backend och genererar `amplify_outputs.json` före bygget.
-Filen ska inte skrivas för hand eller ersättas med lärarens inställningar.
-För lokal inloggning efter en lyckad deployment: hämta den genererade filen
-från Amplify-konsolen, eller med en AWS-inloggad CLI:
-
-```sh
-npx ampx generate outputs --app-id DITT_APP_ID --branch DIN_BRANCH
+```text
+RFID → ESP32 → MQTT/TLS → AWS IoT Core → IoT-regel
+     → doorlockTelemetry → Amplify Data/AppSync → webbsidan
 ```
 
-Starta om Vite efter att filen lagts i projektroten. Inloggning används så fort
-giltiga auth-inställningar finns. Produktionsbygget visar en konfigurationssida
-om filen saknas och visar då ingen dashboard. Lokal förhandsvisning används
-endast i Vites utvecklingsläge. Registreringsknappen är dold. Det stänger inte av självregistrering i Cognito; kontrollera även serverinställningen om endast administratören ska skapa konton.
+`Devices` lagrar enhetens ägare och inställningar. `Telemetry` lagrar kort-ID,
+åtkomststatus, enhet, händelse-ID och tidsstämpel. Lambda hämtar ägaren från
+enhetsregistret. Inloggade användare kan läsa sina egna händelser.
 
-## CORS och API-behörigheter
+Det äldre REST-flödet finns också kvar som valbar datakälla:
 
-API Gateway → DoorLockAPI → CORS. Tillåt följande exakta origins:
+```text
+IoT Core → DoorLockLogs → GetDoorLockLogs → API Gateway → webbsidan
+```
 
-- http://localhost:5173 (utveckling)
-- din Amplify-adress, exempelvis https://main.APPID.amplifyapp.com
+Äldre loggar flyttas inte automatiskt till Amplify Data.
 
-Allowed methods: GET. Allowed headers: Authorization. Credentials: av.
-Spara; $default använder auto-deploy. Använd inte en avslutande slash i origin.
+## Köra lokalt
 
-Cognito-inloggning i frontend skyddar inte API:et i sig. Befintligt GET /logs är
-fortfarande publikt tills en JWT-authorizer kopplats till routen. Efter Amplify-
-deployment, konfigurera i API Gateway → Authorization:
+Använd Node.js 24 eller senare.
 
-- Typ JWT. Identity source: $request.header.Authorization.
-- Issuer: https://cognito-idp.eu-north-1.amazonaws.com/USER_POOL_ID
-- Audience: user_pool_client_id från din genererade amplify_outputs.json.
-- Koppla authorizern till GET /logs. För ett enkelt inloggat testkonto kan scope
-  aws.cognito.signin.user.admin användas; verifiera att det finns i access-token.
+```sh
+npm install
+npm run dev
+```
 
-Appen skickar Cognitos access-token i Authorization-headern när användaren
-är inloggad. Efter att routen skyddats fungerar lokal förhandsvisning utan
-inloggning inte mot den; hämta då dina Amplify-inställningar och logga in.
-Skapa bara avsedda användare: inloggade användare med den konfigurerade
-behörigheten läser samma doorlock-01-loggar. Detta gäller det äldre REST-flödet. Amplify-modellerna använder ägarskap med Cognitos sub-claim.
+Öppna [localhost:5173](http://localhost:5173).
 
-Lambda använder för närvarande PowerUserRole. Byt inför fortsatt drift till
-en separat roll för CloudWatch-loggning och dynamodb:Query på just DoorLockLogs;
-ändra inte en delad skolroll. Inga AWS-nycklar, lösenord eller ESP32-certifikat
-ska finnas i frontend eller Git. VITE_* är publika inställningar.
+För inloggning och Amplify Data behövs projektets genererade
+`amplify_outputs.json` bredvid `package.json`. Hämta filen från Amplify efter
+deployment, eller kör följande med en AWS-inloggad CLI:
 
-## Avgränsning och kvarstående kontroller
+```sh
+npx ampx generate outputs --app-id DITT_APP_ID --branch main
+```
 
-API:et hämtar enhetens alla loggar och väljer sedan de 100 senaste. Vid större
-datamängder behövs tidsindex och paginering i backend. Nya Cognito-resurser,
-GitHub/Amplify-deployment, CORS och JWT-authorizer behöver konfigureras i AWS.
-De skapas inte av att bara köra npm run dev. npm:s rapporterade beroendesårbarheter
-behöver granskas före publicering; kör inte audit fix --force utan genomgång.
+Starta om Vite när filen är på plats. Utan filen visas en lokal förhandsvisning
+som använder REST-API:et. Produktionsversionen kräver auth-konfiguration.
 
-## Workshopguide och återstående moment
+```sh
+npm test       # Tester
+npm run build # Produktionsbygge
+```
 
-Deployment, enhetsregistrering, IoT-regel, realtidstest, webhook och CloudWatch
-behöver verifieras i AWS. Koden är lokalt testad; ett lyckat molnbygge
-och verkliga RFID-/webhooktester krävs för att markera dessa moment klara.
-Status-Lambda för online/offline och ett schemalagt jobb ingår ännu inte. Inte
-heller ett separat to-do-labb om läraren kräver just det; tags här är metadata
-på enheten som kopieras till nya händelser.
+## Deployment
 
-## Dokumentation
+Projektet publiceras med AWS Amplify i `eu-north-1`. `amplify.yml` deployar
+backend, genererar konfigurationen och bygger webbappen till `dist`.
 
-- https://docs.amplify.aws/react/reference/amplify_outputs/
-- https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api-cors.html
-- https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api-jwt-authorizer.html
+Registrera `doorlock-01` på webbsidan och koppla IoT-regeln till den genererade
+`doorlockTelemetry`-funktionen. Regeln använder följande SQL:
+
+```sql
+SELECT topic(2) AS deviceId, eventId, uid, granted,
+       timestamp() AS timestamp
+FROM 'doorlock/doorlock-01/events'
+```
+
+## Discord-notiser
+
+Ange en Discord-webhook under **Enhet och notifieringar** och välj vilka
+notiser som ska skickas. Direkta notiser och morgonrapporten aktiveras separat.
+Webhook-URL:en innehåller en hemlig token och ska inte läggas i Git.
+
+`doorlockDailySummary` körs av EventBridge Scheduler kl. 08:00 i tidszonen
+`Europe/Stockholm`. Rapporten räknar gårdagens Amplify-händelser för enheten
+och dess ägare. Sommar- och vintertid hanteras, och alla sidor av resultatet
+hämtas. Dagar utan kortförsök ger en rapport med nollor.
+
+Ett privat Lambda-testevent med `{}` skickar en riktig rapport för gårdagen.
+Loggarna i CloudWatch visar `Daily summary delivered` och `Daily summary complete`.
+Senaste levererade datum sparas på enheten. En dublett kan förekomma om
+leveransen lyckas men datumet inte sparas, eller vid samtidiga körningar.
+
+## Begränsningar
+
+- Enhetsregistreringen är anpassad för projektets demo. En tjänst med flera
+  användare behöver även kontrollera vem som får registrera varje fysisk enhet.
+- Realtidsvyn synkroniserar alla matchande Amplify-poster och visar de senaste
+  100. Vid större datamängder behöver även vyn använda begränsade tidsfrågor.
+- Det äldre REST-API:et behöver separat åtkomstskydd och CORS-konfiguration.
+  Cognito-inloggningen i webbsidan skyddar inte automatiskt REST-routen.
+- Registreringsknappen för användarkonton är dold. Självregistrering styrs
+  separat i Cognito.
+- Online/offline-status och Device Shadow är ännu inte implementerade.
+
+AWS-nycklar, certifikat och lösenord ska hållas utanför Git. Inställningar med
+prefixet `VITE_` är synliga i webbläsaren och får inte innehålla hemligheter.

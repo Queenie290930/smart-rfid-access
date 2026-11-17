@@ -8,6 +8,7 @@ export function DeviceSettings() {
   const [tags, setTags] = useState('rfid, doorlock');
   const [webhook, setWebhook] = useState('');
   const [notify, setNotify] = useState(false);
+  const [dailySummary, setDailySummary] = useState(false);
   const [registered, setRegistered] = useState(false);
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -21,6 +22,7 @@ export function DeviceSettings() {
       if (data) {
         setRegistered(true); setName(data.name); setTags((data.tags ?? []).filter(Boolean).join(', '));
         setWebhook(data.webhookUrl ?? ''); setNotify(data.notifyDenied ?? false);
+        setDailySummary(data.notifyDailySummary ?? false);
       }
       setReady(true);
     }).catch(() => { if (active) setMessage('Kunde inte läsa enhetsregistret. Ladda om sidan.'); });
@@ -33,10 +35,11 @@ export function DeviceSettings() {
       const owner = (await fetchAuthSession()).tokens?.idToken?.payload.sub;
       if (!owner) throw new Error('Logga in igen.');
       if (!name.trim()) throw new Error('Ange ett namn.');
-      if (notify && !webhook.trim()) throw new Error('Ange en Discord-webhook för notifieringar.');
+      if ((notify || dailySummary) && !webhook.trim()) throw new Error('Ange en Discord-webhook för notifieringar.');
       const webhookUrl = webhook.trim() ? discordWebhookUrl(webhook.trim()) : null;
       const fields = { deviceId: 'doorlock-01', name: name.trim(), owner,
-        tags: tags.split(',').map(t => t.trim()).filter(Boolean), webhookUrl, notifyDenied: notify };
+        tags: tags.split(',').map(t => t.trim()).filter(Boolean), webhookUrl, notifyDenied: notify,
+        notifyDailySummary: dailySummary };
       const model = createDataClient().models.Devices;
       const result = registered ? await model.update(fields) : await model.create(fields);
       if (result.errors?.length || !result.data) throw new Error('Kunde inte spara. Kontrollera behörigheter och att enheten inte har en annan ägare.');
@@ -52,6 +55,7 @@ export function DeviceSettings() {
       <label>Etiketter (komma mellan varje)<input value={tags} onChange={e => setTags(e.target.value)} placeholder="rfid, entré" /></label>
       <label>Discord-webhook<input type="password" autoComplete="new-password" value={webhook} onChange={e => setWebhook(e.target.value)} placeholder="https://discord.com/api/webhooks/…" /></label>
       <label className="auto"><input type="checkbox" checked={notify} onChange={e => setNotify(e.target.checked)} /> Skicka notis vid varje nekat försök</label>
+      <label className="auto"><input type="checkbox" checked={dailySummary} onChange={e => setDailySummary(e.target.checked)} /> Skicka gårdagens sammanställning kl. 08:00 svensk tid</label>
       <button className="refresh" disabled={!ready || busy}>{busy ? 'Sparar…' : registered ? 'Spara inställningar' : 'Registrera min enhet'}</button>
       <p role="status">{message}</p>
     </form>

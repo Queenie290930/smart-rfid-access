@@ -11,3 +11,5 @@
 .device-settings label:not(.auto){display:grid;gap:.4rem}
 .device-settings input:not([type=checkbox]){width:100%;padding:.7rem;border:1px solid #dce5f1;border-radius:8px;font:inherit;box-sizing:border-box}
 .device-settings button{justify-self:start}
+
+.device-settings .auto{white-space:normal;align-items:flex-start}.device-settings .auto input{flex-shrink:0}
