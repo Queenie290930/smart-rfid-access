@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { fetchAuthSession } from 'aws-amplify/auth';
 import { createDataClient } from './dataClient';
 import { discordWebhookUrl } from '../amplify/functions/doorlockTelemetry/event';
+import { BuzzerControl } from './BuzzerControl';
 
 export function DeviceSettings() {
   const [name, setName] = useState('Min DoorLock');
@@ -59,5 +60,6 @@ export function DeviceSettings() {
       <button className="refresh" disabled={!ready || busy}>{busy ? 'Sparar…' : registered ? 'Spara inställningar' : 'Registrera min enhet'}</button>
       <p role="status">{message}</p>
     </form>
+    {registered && <BuzzerControl />}
   </details>;
 }

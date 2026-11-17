@@ -1,6 +1,8 @@
 import { a, defineData, type ClientSchema } from '@aws-amplify/backend';
 import { doorlockTelemetry } from '../functions/doorlockTelemetry/resource';
 import { dailySummary } from '../functions/dailySummary/resource';
+import { setBuzzerShadow } from '../functions/setBuzzerShadow/resource';
+import { storeDeviceShadow } from '../functions/storeDeviceShadow/resource';
 
 const schema = a.schema({
   Devices: a.model({
@@ -12,6 +14,10 @@ const schema = a.schema({
     notifyDenied: a.boolean(),
     notifyDailySummary: a.boolean(),
     lastDailySummaryDate: a.date(),
+    shadowDesiredBuzzer: a.boolean(),
+    shadowReportedBuzzer: a.boolean(),
+    shadowVersion: a.integer(),
+    shadowUpdatedAt: a.datetime(),
   }).identifier(['deviceId']).authorization((allow) => [
     allow.ownerDefinedIn('owner').identityClaim('sub'),
   ]),
@@ -30,9 +36,16 @@ const schema = a.schema({
     // Browser users can read their events; only the ingestion function writes them.
     allow.ownerDefinedIn('owner').identityClaim('sub').to(['read']),
   ]),
+  SetBuzzer: a.mutation()
+    .arguments({ deviceId: a.string().required(), buzzerEnabled: a.boolean().required() })
+    .returns(a.boolean())
+    .authorization(allow => [allow.authenticated()])
+    .handler(a.handler.function(setBuzzerShadow)),
 }).authorization((allow) => [
   allow.resource(doorlockTelemetry).to(['query', 'mutate']),
   allow.resource(dailySummary).to(['query', 'mutate']),
+  allow.resource(setBuzzerShadow).to(['query']),
+  allow.resource(storeDeviceShadow).to(['query', 'mutate']),
 ]);
 
 export type Schema = ClientSchema<typeof schema>;

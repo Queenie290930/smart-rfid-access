@@ -1,0 +1,41 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "iot:Connect",
+      "Resource": "arn:aws:iot:REGION:ACCOUNT_ID:client/doorlock-01"
+    },
+    {
+      "Effect": "Allow",
+      "Action": "iot:Publish",
+      "Resource": [
+        "arn:aws:iot:REGION:ACCOUNT_ID:topic/doorlock/doorlock-01/events",
+        "arn:aws:iot:REGION:ACCOUNT_ID:topic/$aws/things/doorlock-01/shadow/get",
+        "arn:aws:iot:REGION:ACCOUNT_ID:topic/$aws/things/doorlock-01/shadow/update"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": "iot:Subscribe",
+      "Resource": [
+        "arn:aws:iot:REGION:ACCOUNT_ID:topicfilter/$aws/things/doorlock-01/shadow/get/accepted",
+        "arn:aws:iot:REGION:ACCOUNT_ID:topicfilter/$aws/things/doorlock-01/shadow/get/rejected",
+        "arn:aws:iot:REGION:ACCOUNT_ID:topicfilter/$aws/things/doorlock-01/shadow/update/delta",
+        "arn:aws:iot:REGION:ACCOUNT_ID:topicfilter/$aws/things/doorlock-01/shadow/update/accepted",
+        "arn:aws:iot:REGION:ACCOUNT_ID:topicfilter/$aws/things/doorlock-01/shadow/update/rejected"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": "iot:Receive",
+      "Resource": [
+        "arn:aws:iot:REGION:ACCOUNT_ID:topic/$aws/things/doorlock-01/shadow/get/accepted",
+        "arn:aws:iot:REGION:ACCOUNT_ID:topic/$aws/things/doorlock-01/shadow/get/rejected",
+        "arn:aws:iot:REGION:ACCOUNT_ID:topic/$aws/things/doorlock-01/shadow/update/delta",
+        "arn:aws:iot:REGION:ACCOUNT_ID:topic/$aws/things/doorlock-01/shadow/update/accepted",
+        "arn:aws:iot:REGION:ACCOUNT_ID:topic/$aws/things/doorlock-01/shadow/update/rejected"
+      ]
+    }
+  ]
+}

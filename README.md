@@ -15,6 +15,7 @@ Webbappen bygger på [kursens React/Vite/Amplify-mall](https://github.com/jh83/a
 - Enhetsregister med ägare, namn och etiketter.
 - Discord-notis vid nekade kortförsök.
 - Daglig Discord-sammanställning kl. 08:00 svensk tid efter deployment och aktivering.
+- Buzzer på/av via Device Shadow, med önskat och rapporterat läge.
 
 Kortbehörigheter hanteras i ESP32-koden. Enhetsregistreringen på webbsidan
 lägger inte till eller spärrar RFID-kort.
@@ -102,6 +103,30 @@ Loggarna i CloudWatch visar `Daily summary delivered` och `Daily summary complet
 Senaste levererade datum sparas på enheten. En dublett kan förekomma om
 leveransen lyckas men datumet inte sparas, eller vid samtidiga körningar.
 
+## Device Shadow
+
+Under enhetsinställningarna kan ägaren begära att buzzern slås på eller av.
+`SetBuzzer` kontrollerar enhetens ägare och uppdaterar `desired.buzzerEnabled`
+i dess klassiska Device Shadow. ESP32 tillämpar värdet och skickar `reported`.
+En IoT-regel och `storeDeviceShadow` speglar Shadow-status till Amplify så att
+webbsidan kan visa både önskat och senast rapporterat läge.
+
+Firmware finns i `firmware/DoorLock`. Arduino-biblioteken MFRC522, PubSubClient
+och ArduinoJson behövs. `DeviceShadow.h` ska ligga bredvid `DoorLock.ino` och
+`pins.h`. Kopiera `secrets.example.h` till en lokal `secrets.h` och fyll i egna
+uppgifter om projektet installeras på en ny dator.
+
+Utöka certifikatets IoT-policy enligt `firmware/doorlock-iot-policy.json` innan
+firmware laddas upp. Byt REGION och ACCOUNT_ID till det egna kontots värden.
+Policyn behåller publicering av kortförsök och tillåter enbart de Shadow-topics
+som enheten använder. Backend skapar Shadow-regeln och Lambda-behörigheterna.
+
+Buzzerinställningen sparas lokalt i ESP32 och läses även efter omstart.
+Vid MQTT-återanslutning hämtas aktuellt önskat läge från AWS. En begäran kan
+ligga kvar i molnet medan enheten är frånkopplad; senast rapporterat läge
+är inte samma sak som aktuell online-status. RGB och kortbehörigheter påverkas
+inte av buzzerinställningen.
+
 ## Begränsningar
 
 - Enhetsregistreringen är anpassad för projektets demo. En tjänst med flera
@@ -112,7 +137,7 @@ leveransen lyckas men datumet inte sparas, eller vid samtidiga körningar.
   Cognito-inloggningen i webbsidan skyddar inte automatiskt REST-routen.
 - Registreringsknappen för användarkonton är dold. Självregistrering styrs
   separat i Cognito.
-- Online/offline-status och Device Shadow är ännu inte implementerade.
+- Online/offline-status är ännu inte implementerad.
 
 AWS-nycklar, certifikat och lösenord ska hållas utanför Git. Inställningar med
 prefixet `VITE_` är synliga i webbläsaren och får inte innehålla hemligheter.
