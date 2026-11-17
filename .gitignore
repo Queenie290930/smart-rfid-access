@@ -46,3 +46,6 @@ secrets_real.h
 .npm/
 coverage/
 *.tsbuildinfo
+
+# Local workshop guide
+/WORKSHOP.md

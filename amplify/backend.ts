@@ -1,6 +1,7 @@
 import { defineBackend } from '@aws-amplify/backend';
 import { auth } from './auth/resource';
+import { data } from './data/resource';
+import { doorlockTelemetry } from './functions/doorlockTelemetry/resource';
 
-// Loggarna läses från befintligt API Gateway/Lambda och DoorLockLogs.
-// Amplify skapar endast resurserna för inloggning här.
-defineBackend({ auth });
+// Existing REST API and DoorLockLogs remain separate during migration.
+defineBackend({ auth, data, doorlockTelemetry });

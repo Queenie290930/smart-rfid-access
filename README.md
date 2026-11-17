@@ -2,7 +2,20 @@
 
 Lärarens React/Vite/Amplify-mall, anpassad till ESP32 + RC522 + RGB + buzzer.
 
-## Befintligt dataflöde
+## Dataflöden
+
+Nytt workshopflöde (kräver deployment och separat IoT-regel):
+
+RFID → ESP32 → MQTT/TLS → IoT-regel → doorlockTelemetry (Lambda)
+→ Amplify Data/AppSync GraphQL → Telemetry → subscription → React.
+
+Devices innehåller ägare, namn, metadataetiketter och valfri Discord-webhook.
+Lambda hämtar owner från enhetsregistret. Browseranvändare får bara läsa sina
+Telemetry-poster; Lambda skriver dem via IAM. Inget publikt API-key-läge ingår.
+Frontendens enhetsregistrering är avsedd för denna enanvändardemo; för en publik
+fleranvändartjänst behövs även säker tilldelning av fysiska enheter vid registrering.
+
+Äldre flöde, separat och tillgängligt via datakällsväljaren:
 
 RFID → ESP32 → MQTT/TLS → AWS IoT Core → IoT-regel → DoorLockLogs (DynamoDB)
 → GetDoorLockLogs (Lambda) → API Gateway GET /logs → React-dashboard.
@@ -10,8 +23,8 @@ RFID → ESP32 → MQTT/TLS → AWS IoT Core → IoT-regel → DoorLockLogs (Dyn
 API: https://9lxucnwrvi.execute-api.eu-north-1.amazonaws.com/logs
 
 Dashboarden visar UID, godkänd/nekad åtkomst, tid, enhet, sökning, statusfilter,
-statistik och valfri uppdatering var 30:e sekund. Tider visas i Europe/Stockholm.
-Statistiken gäller de upp till 100 loggar API:et returnerar, inte hela databasen.
+statistik, GraphQL-realtid och valfri polling för det äldre REST-flödet. Tider visas i Europe/Stockholm.
+Statistiken gäller de upp till 100 visade loggarna. observeQuery synkroniserar alla ägarens matchande poster och vyn visar de senaste 100; vid större datamängder behövs tidsindex och begränsade frågor.
 Ingen servo eller kortadministration ingår. Kortbehörigheter styrs ännu i ESP32.
 
 ## Lokal start
@@ -25,8 +38,7 @@ Ingen servo eller kortadministration ingår. Kortbehörigheter styrs ännu i ESP
 
 ## Amplify-backend och inloggning
 
-`amplify/backend.ts` skapar bara Cognito-auth. Mallens väderdatamodeller,
-SMHI-jobb och temperaturfunktioner är borttagna. Befintligt IoT Core, Lambda,
+`amplify/backend.ts` definierar befintlig Cognito-auth, Devices, Telemetry och doorlockTelemetry. Väderexemplen är ersatta med RFID-fält. Befintligt IoT Core, Lambda,
 API Gateway och DoorLockLogs ändras inte av den här koden.
 
 Koppla ditt eget GitHub-repository till Amplify i eu-north-1. Befintlig
@@ -42,8 +54,7 @@ npx ampx generate outputs --app-id DITT_APP_ID --branch DIN_BRANCH
 Starta om Vite efter att filen lagts i projektroten. Inloggning används så fort
 giltiga auth-inställningar finns. Produktionsbygget visar en konfigurationssida
 om filen saknas och visar då ingen dashboard. Lokal förhandsvisning används
-endast i Vites utvecklingsläge. Produktionsinloggningen saknar publik registrering;
-skapa ditt eget användarkonto i den Cognito user pool Amplify skapar.
+endast i Vites utvecklingsläge. Registreringsknappen är dold. Det stänger inte av självregistrering i Cognito; kontrollera även serverinställningen om endast administratören ska skapa konton.
 
 ## CORS och API-behörigheter
 
@@ -69,7 +80,7 @@ Appen skickar Cognitos access-token i Authorization-headern när användaren
 är inloggad. Efter att routen skyddats fungerar lokal förhandsvisning utan
 inloggning inte mot den; hämta då dina Amplify-inställningar och logga in.
 Skapa bara avsedda användare: inloggade användare med den konfigurerade
-behörigheten läser samma doorlock-01-loggar. Fleranvändarägarskap ingår inte.
+behörigheten läser samma doorlock-01-loggar. Detta gäller det äldre REST-flödet. Amplify-modellerna använder ägarskap med Cognitos sub-claim.
 
 Lambda använder för närvarande PowerUserRole. Byt inför fortsatt drift till
 en separat roll för CloudWatch-loggning och dynamodb:Query på just DoorLockLogs;
@@ -83,6 +94,15 @@ datamängder behövs tidsindex och paginering i backend. Nya Cognito-resurser,
 GitHub/Amplify-deployment, CORS och JWT-authorizer behöver konfigureras i AWS.
 De skapas inte av att bara köra npm run dev. npm:s rapporterade beroendesårbarheter
 behöver granskas före publicering; kör inte audit fix --force utan genomgång.
+
+## Workshopguide och återstående moment
+
+Deployment, enhetsregistrering, IoT-regel, realtidstest, webhook och CloudWatch
+behöver verifieras i AWS. Koden är lokalt testad; ett lyckat molnbygge
+och verkliga RFID-/webhooktester krävs för att markera dessa moment klara.
+Status-Lambda för online/offline och ett schemalagt jobb ingår ännu inte. Inte
+heller ett separat to-do-labb om läraren kräver just det; tags här är metadata
+på enheten som kopieras till nya händelser.
 
 ## Dokumentation
 
