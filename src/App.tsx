@@ -19,8 +19,7 @@ const dateFormat = new Intl.DateTimeFormat("sv-SE", {
 interface Props { authenticated: boolean; account?: string; onSignOut?: () => void }
 
 function App({ authenticated, account, onSignOut }: Props) {
-  const [source, setSource] = useState(hasData && authenticated ? "amplify" : "legacy");
-  const [syncVersion, setSyncVersion] = useState(0);
+  const [source] = useState(hasData && authenticated ? "amplify" : "legacy");  const [syncVersion, setSyncVersion] = useState(0);
   const [logs, setLogs] = useState<AccessLog[]>([]);
   const [loadedAt, setLoadedAt] = useState<Date | null>(null);
   const [error, setError] = useState("");
@@ -121,10 +120,6 @@ function App({ authenticated, account, onSignOut }: Props) {
     return () => { active = false; window.clearTimeout(timeout); stopListening(); subscription.unsubscribe(); };
   }, [source, syncVersion]);
 
-  function changeSource(value: string) {
-    setLogs([]); setLoadedAt(null); setError(""); setLoading(true); setSource(value);
-  }
-
   useEffect(() => {
     if (!autoRefresh || source === "amplify") return;
     const interval = window.setInterval(() => {
@@ -149,7 +144,6 @@ function App({ authenticated, account, onSignOut }: Props) {
           <div><p className="eyebrow">RFID · AWS IOT CORE · AMPLIFY</p><h1>Koll på varje kortförsök.</h1><p className="subtitle">Åtkomsthistorik från din RFID-läsare, samlad på ett ställe.</p></div>
           <button className="refresh" disabled={loading} onClick={() => void loadLogs()}>{loading ? "Hämtar…" : source === "amplify" ? "↻  Anslut igen" : "↻  Uppdatera loggar"}</button>
         </div>
-        {hasData && authenticated && <div className="data-source"><label>Visa loggar från <select value={source} onChange={e => changeSource(e.target.value)}><option value="amplify">Amplify · nya händelser</option></select></label><p>Amplify-loggar börjar när enheten registrerats och IoT-regeln kopplats till den nya Lambda-funktionen. Äldre loggar flyttas inte automatiskt.</p></div>}
         <div className="connection" role="status" aria-live="polite"><span className={`dot ${loading ? "" : error ? "failed" : "ok"}`} /><span>{loading ? "Hämtar loggar…" : error ? loadedAt ? "Uppdatering misslyckades · visar tidigare data" : "Ingen anslutning till API:et" : source === "amplify" ? "Amplify-data synkroniserad · automatiska uppdateringar" : "Loggar hämtade från REST-API"}</span><span className="updated">{loadedAt && `Senast hämtat ${timeFormat.format(loadedAt)}`}</span></div>
         {error && <div className="error" role="alert">{error}</div>}
         <section className="stats" aria-label="Statistik för hämtade loggar">
