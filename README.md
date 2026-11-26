@@ -72,16 +72,6 @@ Däremot skulle jag behöva förbättra min kod. Varje enhet skulle behöva ett 
 
 ## Tester och bilder
 
-Kortförsöken registrerades den 17 november 2026. Skärmbilder och hårdvarufoton
-togs den 20 november. Realtidsuppdateringar och buzzerljud har kontrollerats
-vid live-test; stillbilderna visar resultaten nedan.
-
-### Kortförsök i Amplify
-
-17 sparade försök: 9 godkända och 8 nekade, med kort-ID, tid och enhet.
-
-![Amplify med 17 kortförsök, 9 godkända och 8 nekade](docs/images/dashboard.png)
-
 ### Inloggning
 
 Inloggningsformulär för webbappen. Bilden visar gränssnittet, inte ett fullständigt behörighetstest.
