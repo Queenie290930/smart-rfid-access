@@ -66,16 +66,9 @@ och realtidsuppdateringar.
 
 ### Skalbarhet och begränsningar
 
-100 kortförsök per dygn ger 3 000 händelser på 30 dagar för en enhet och
-3 miljoner för 1 000 enheter. Det är ett räkneexempel, inte ett belastningstest.
-Fler enheter kräver ändringar av de fasta enhets-ID:na, säker registrering,
-begränsade tidsfrågor och paginering. Dashboarden synkroniserar nu alla
-matchande poster men visar de senaste 100. Tjänstekvoter och kostnader för
-meddelanden, lagring och läsningar behöver följas upp.
+Om jag skulle utöka systemet från en enhet till 1 000 enheter skulle jag fortsätta använda AWS eftersom molntjänsterna har stöd för skalbarhet.
 
-Firmware sparar bara en osänd logg i RAM och använder MQTT QoS 0, så händelser
-kan förloras vid avbrott. Större drift behöver beständig kö och återförsök.
-Senast rapporterat Shadow-läge visar inte om enheten är online just nu.
+Däremot skulle jag behöva förbättra min kod. Varje enhet skulle behöva ett unikt enhets-ID och ett eget certifikat. Jag skulle också behöva optimera hur information hämtas från databasen för att undvika onödiga kostnader och långsamma laddningstider.
 
 ## Tester och bilder
 
