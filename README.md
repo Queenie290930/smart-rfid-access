@@ -74,8 +74,6 @@ Däremot skulle jag behöva förbättra min kod. Varje enhet skulle behöva ett 
 
 ### Inloggning
 
-Inloggningsformulär för webbappen. Bilden visar gränssnittet, inte ett fullständigt behörighetstest.
-
 ![Cognito-inloggning](docs/images/login.png)
 
 ### Discord-notiser och morgonrapport
